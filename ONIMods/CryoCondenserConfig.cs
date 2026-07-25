@@ -29,7 +29,11 @@ namespace OxygenNotIncluded.Mods.ModTemplate
             );
 
             BuildingTemplates.CreateElectricalBuildingDef(buildingDef);
-            buildingDef.EnergyConsumptionWhenActive = 0f; // Dynamic calculation overrides this
+
+            // Read configured power (fallback to 2400W if config isn't loaded)
+            float powerRequirement = PlayerConfig.Instance?.PowerConsumption ?? 2400f;
+            buildingDef.EnergyConsumptionWhenActive = powerRequirement;
+            buildingDef.ExhaustKilowattsWhenActive = 0f;
             buildingDef.SelfHeatKilowattsWhenActive = 0f;
 
             // Utility Offsets
