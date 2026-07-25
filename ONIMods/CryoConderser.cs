@@ -13,19 +13,26 @@ namespace OxygenNotIncluded.Mods.ModTemplate
         private Operational operational;
         [MyCmpReq]
         private PrimaryElement primaryElement;
+        [MyCmpReq]
+        private EnergyConsumer energyConsumer;
 #pragma warning restore CS0649
 
-        private const float BATCH_MASS_KG = 10f; // Target 10 kg output batch
+        private const float BATCH_MASS_KG = 10f;
+        private const float BASE_IDLE_WATTAGE = 0f;
+
+        // Ratio based on Aquatuner baseline (1200W / 585,060 DTU/s = ~0.002051 W/DTU)
+        private const float WATTS_PER_DTU_PER_SEC = 1200f / 585060f;
 
         public void Sim200ms(float dt)
         {
             if (!operational.IsOperational)
             {
                 operational.SetActive(false);
+                energyConsumer.BaseWattageRating = BASE_IDLE_WATTAGE;
                 return;
             }
 
-            // Find how much gas is currently stored
+            // Calculate total matching gas mass in storage
             float storedGasMass = 0f;
             GameObject targetGasItem = null;
 
@@ -42,28 +49,36 @@ namespace OxygenNotIncluded.Mods.ModTemplate
                 }
             }
 
-            // Only operate when we have at least 10 kg of gas accumulated!
+            // Only run when we have accumulated a full 10 kg batch
             if (storedGasMass >= BATCH_MASS_KG && targetGasItem != null)
             {
-                operational.SetActive(true);
-
                 PrimaryElement pe = targetGasItem.GetComponent<PrimaryElement>();
                 Element element = pe.Element;
                 Element liquidElement = element.lowTempTransition;
 
-                // Process up to 10 kg at a time
                 float massToConvert = Mathf.Min(pe.Mass, BATCH_MASS_KG);
 
-                // Target temperature: 14 K below condensation point
+                // Target temp: 14 K below condensation point
                 float targetTempKelvin = Mathf.Max(element.lowTemp - 14f, 1f);
 
-                // Heat transfer: Dump heat energy extracted into the building body
                 float tempDiff = pe.Temperature - targetTempKelvin;
+                float heatExtractedDTU = 0f;
+
                 if (tempDiff > 0f)
                 {
-                    float heatExtractedDTU = massToConvert * element.specificHeatCapacity * tempDiff;
+                    // Total heat extracted (DTU) for this batch
+                    heatExtractedDTU = massToConvert * element.specificHeatCapacity * tempDiff;
 
-                    // Dump heat directly into this building
+                    // Heat rate per second (since Sim200ms runs 5 times per second, batch heat per sec)
+                    float heatRateDTUperSec = heatExtractedDTU;
+
+                    // Dynamic Power Calculation based on extracted heat
+                    float dynamicWattage = heatRateDTUperSec * WATTS_PER_DTU_PER_SEC;
+
+                    // Set building power draw dynamically
+                    energyConsumer.BaseWattageRating = dynamicWattage;
+
+                    // Dump extracted heat directly into building body
                     float buildingMass = primaryElement.Mass;
                     float buildingSHC = primaryElement.Element.specificHeatCapacity;
 
@@ -73,14 +88,16 @@ namespace OxygenNotIncluded.Mods.ModTemplate
                     }
                 }
 
-                // Consume the gas mass
+                // Activate building visual/audio states
+                operational.SetActive(true);
+
+                // Perform Element Transition
                 SimHashes liquidHash = liquidElement.id;
                 byte diseaseIdx = pe.DiseaseIdx;
                 int diseaseCount = pe.DiseaseCount;
 
                 storage.ConsumeIgnoringDisease(targetGasItem);
 
-                // Add 10 kg liquid to storage for dispensing
                 storage.AddLiquid(
                     liquidHash,
                     massToConvert,
@@ -93,6 +110,8 @@ namespace OxygenNotIncluded.Mods.ModTemplate
             }
             else
             {
+                // Reset power draw & state when idle/buffering gas
+                energyConsumer.BaseWattageRating = BASE_IDLE_WATTAGE;
                 operational.SetActive(false);
             }
         }
