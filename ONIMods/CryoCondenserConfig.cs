@@ -16,7 +16,7 @@ namespace OxygenNotIncluded.Mods.ModTemplate
             string anim = "liquidconditioner_kanim";
             int hitpoints = 100;
             float construction_time = 120f;
-            float[] tierMass = BUILDINGS.CONSTRUCTION_MASS_KG.TIER6; // 1200 kg
+            float[] tierMass = BUILDINGS.CONSTRUCTION_MASS_KG.TIER6; // 2000 kg
             string[] rawMetals = MATERIALS.ALL_METALS;
             float melting_point = 1600f;
             BuildLocationRule build_location_rule = BuildLocationRule.OnFloor;
@@ -29,10 +29,10 @@ namespace OxygenNotIncluded.Mods.ModTemplate
             );
 
             BuildingTemplates.CreateElectricalBuildingDef(buildingDef);
-            buildingDef.EnergyConsumptionWhenActive = 3600f;
+            buildingDef.EnergyConsumptionWhenActive = 0f; // Dynamic calculation overrides this
             buildingDef.SelfHeatKilowattsWhenActive = 0f;
 
-            // Piping setup: Gas In -> Liquid Out
+            // Utility Offsets
             buildingDef.InputConduitType = ConduitType.Gas;
             buildingDef.UtilityInputOffset = new CellOffset(0, 1);
 
@@ -45,7 +45,7 @@ namespace OxygenNotIncluded.Mods.ModTemplate
             buildingDef.PermittedRotations = PermittedRotations.FlipH;
             buildingDef.ViewMode = OverlayModes.LiquidConduits.ID;
             buildingDef.Overheatable = true;
-            buildingDef.OverheatTemperature = 398.15f;
+            buildingDef.OverheatTemperature = 398.15f; // +125°C Base Overheat
             buildingDef.LogicInputPorts = LogicOperationalController.CreateSingleInputPortList(new CellOffset(1, 1));
 
             GeneratedBuildings.RegisterWithOverlay(OverlayScreen.LiquidVentIDs, ID);
@@ -55,31 +55,28 @@ namespace OxygenNotIncluded.Mods.ModTemplate
 
         public override void ConfigureBuildingTemplate(GameObject go, Tag prefab_tag)
         {
-            // 1. Add standard storage
+            // Storage configured for 100 kg total capacity
             Storage storage = go.AddOrGet<Storage>();
-            storage.capacityKg = 2000f;
+            storage.capacityKg = 100f;
             storage.showInUI = true;
             storage.SetDefaultStoredItemModifiers(StoredItemModifiers);
 
-            // 2. Gas Consumer
+            // Gas Intake
             ConduitConsumer conduitConsumer = go.AddOrGet<ConduitConsumer>();
             conduitConsumer.conduitType = ConduitType.Gas;
             conduitConsumer.consumptionRate = 10f;
             conduitConsumer.capacityTag = GameTags.Gas;
             conduitConsumer.wrongElementResult = ConduitConsumer.WrongElementResult.Dump;
-            conduitConsumer.storage = storage; // Explicit binding required!
+            conduitConsumer.storage = storage;
 
-            // 3. Liquid Dispenser
+            // Liquid Output
             ConduitDispenser conduitDispenser = go.AddOrGet<ConduitDispenser>();
             conduitDispenser.conduitType = ConduitType.Liquid;
             conduitDispenser.alwaysDispense = true;
-            conduitDispenser.elementFilter = null; // Dispense all liquids
-            conduitDispenser.storage = storage; // Explicit binding required!
+            conduitDispenser.elementFilter = null;
+            conduitDispenser.storage = storage;
 
-            // 4. Attach Looping Sounds
             go.AddOrGet<LoopingSounds>();
-
-            // 5. CRITICAL FIX: Attach your custom CryoCondenser script component!
             go.AddOrGet<CryoCondenser>();
         }
 

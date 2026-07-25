@@ -17,68 +17,101 @@ namespace OxygenNotIncluded.Mods.ModTemplate
         private EnergyConsumer energyConsumer;
 #pragma warning restore CS0649
 
-        private const float BATCH_MASS_KG = 10f;
-        private const float BASE_IDLE_WATTAGE = 0f;
-
-        // Ratio based on Aquatuner baseline (1200W / 585,060 DTU/s = ~0.002051 W/DTU)
-        private const float WATTS_PER_DTU_PER_SEC = 1200f / 585060f;
+        private const float BATCH_MASS_KG = 10f; // Requires 10 kg batch
+        private const float WATTS_PER_DTU_PER_SEC = 1200f / 585060f; // ~0.002051 W per DTU/s
 
         public void Sim200ms(float dt)
         {
             if (!operational.IsOperational)
             {
                 operational.SetActive(false);
-                energyConsumer.BaseWattageRating = BASE_IDLE_WATTAGE;
+                energyConsumer.BaseWattageRating = 0f;
                 return;
             }
 
-            // Calculate total matching gas mass in storage
-            float storedGasMass = 0f;
-            GameObject targetGasItem = null;
+            // 1. Group total stored gas mass by Element type
+            System.Collections.Generic.Dictionary<Element, float> elementMassMap = new System.Collections.Generic.Dictionary<Element, float>();
 
-            for (int i = storage.items.Count - 1; i >= 0; i--)
+            for (int i = 0; i < storage.items.Count; i++)
             {
                 GameObject item = storage.items[i];
                 if (item == null) continue;
 
                 PrimaryElement pe = item.GetComponent<PrimaryElement>();
-                if (pe != null && pe.Element.IsGas && pe.Element.lowTempTransition != null)
+                if (pe != null && pe.Element.IsGas && pe.Element.lowTempTransition != null && pe.Mass > 0f)
                 {
-                    storedGasMass += pe.Mass;
-                    if (targetGasItem == null) targetGasItem = item;
+                    if (!elementMassMap.ContainsKey(pe.Element))
+                    {
+                        elementMassMap[pe.Element] = 0f;
+                    }
+                    elementMassMap[pe.Element] += pe.Mass;
                 }
             }
 
-            // Only run when we have accumulated a full 10 kg batch
-            if (storedGasMass >= BATCH_MASS_KG && targetGasItem != null)
+            // 2. Find the gas element that has the HIGHEST accumulated mass
+            Element targetGasElement = null;
+            float maxMassFound = 0f;
+
+            foreach (var kvp in elementMassMap)
             {
-                PrimaryElement pe = targetGasItem.GetComponent<PrimaryElement>();
-                Element element = pe.Element;
-                Element liquidElement = element.lowTempTransition;
+                if (kvp.Value >= BATCH_MASS_KG && kvp.Value > maxMassFound)
+                {
+                    maxMassFound = kvp.Value;
+                    targetGasElement = kvp.Key;
+                }
+            }
 
-                float massToConvert = Mathf.Min(pe.Mass, BATCH_MASS_KG);
+            // 3. Process the chosen gas element if it has at least 10 kg
+            if (targetGasElement != null)
+            {
+                Element liquidElement = targetGasElement.lowTempTransition;
+                float massToConvert = BATCH_MASS_KG;
+                float targetTempKelvin = Mathf.Max(targetGasElement.lowTemp - 14f, 1f);
 
-                // Target temp: 14 K below condensation point
-                float targetTempKelvin = Mathf.Max(element.lowTemp - 14f, 1f);
+                // Consume exactly 10 kg of this specific gas
+                float remainingToConsume = massToConvert;
+                float totalGasTempSum = 0f;
+                byte diseaseIdx = 0;
+                int diseaseCount = 0;
 
-                float tempDiff = pe.Temperature - targetTempKelvin;
-                float heatExtractedDTU = 0f;
+                for (int i = storage.items.Count - 1; i >= 0; i--)
+                {
+                    GameObject item = storage.items[i];
+                    if (item == null) continue;
+
+                    PrimaryElement pe = item.GetComponent<PrimaryElement>();
+                    if (pe != null && pe.Element == targetGasElement && pe.Mass > 0f)
+                    {
+                        float amountFromThisItem = Mathf.Min(pe.Mass, remainingToConsume);
+                        totalGasTempSum += pe.Temperature * amountFromThisItem;
+                        diseaseIdx = pe.DiseaseIdx;
+                        diseaseCount += pe.DiseaseCount;
+
+                        remainingToConsume -= amountFromThisItem;
+                        pe.Mass -= amountFromThisItem;
+
+                        if (pe.Mass <= 0f)
+                        {
+                            storage.ConsumeIgnoringDisease(item);
+                        }
+
+                        if (remainingToConsume <= 0f) break;
+                    }
+                }
+
+                float averageGasTemp = totalGasTempSum / massToConvert;
+                float tempDiff = averageGasTemp - targetTempKelvin;
 
                 if (tempDiff > 0f)
                 {
-                    // Total heat extracted (DTU) for this batch
-                    heatExtractedDTU = massToConvert * element.specificHeatCapacity * tempDiff;
+                    // Calculate dynamic wattage
+                    float heatExtractedDTU = massToConvert * targetGasElement.specificHeatCapacity * tempDiff;
+                    float heatRateDTUperSec = heatExtractedDTU * 5f; // 5 ticks / sec
 
-                    // Heat rate per second (since Sim200ms runs 5 times per second, batch heat per sec)
-                    float heatRateDTUperSec = heatExtractedDTU;
-
-                    // Dynamic Power Calculation based on extracted heat
                     float dynamicWattage = heatRateDTUperSec * WATTS_PER_DTU_PER_SEC;
-
-                    // Set building power draw dynamically
                     energyConsumer.BaseWattageRating = dynamicWattage;
 
-                    // Dump extracted heat directly into building body
+                    // Building frame heating
                     float buildingMass = primaryElement.Mass;
                     float buildingSHC = primaryElement.Element.specificHeatCapacity;
 
@@ -88,16 +121,10 @@ namespace OxygenNotIncluded.Mods.ModTemplate
                     }
                 }
 
-                // Activate building visual/audio states
                 operational.SetActive(true);
 
-                // Perform Element Transition
+                // Dispense converted liquid packet
                 SimHashes liquidHash = liquidElement.id;
-                byte diseaseIdx = pe.DiseaseIdx;
-                int diseaseCount = pe.DiseaseCount;
-
-                storage.ConsumeIgnoringDisease(targetGasItem);
-
                 storage.AddLiquid(
                     liquidHash,
                     massToConvert,
@@ -110,8 +137,8 @@ namespace OxygenNotIncluded.Mods.ModTemplate
             }
             else
             {
-                // Reset power draw & state when idle/buffering gas
-                energyConsumer.BaseWattageRating = BASE_IDLE_WATTAGE;
+                // Idle state: set active false and 0W draw
+                energyConsumer.BaseWattageRating = 0f;
                 operational.SetActive(false);
             }
         }
