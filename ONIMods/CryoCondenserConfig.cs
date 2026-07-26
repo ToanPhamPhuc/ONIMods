@@ -30,7 +30,7 @@ namespace OxygenNotIncluded.Mods.ModTemplate
 
             BuildingTemplates.CreateElectricalBuildingDef(buildingDef);
 
-            // Read configured power (fallback to 2400W if config isn't loaded)
+            // Base classic power requirement from config
             float powerRequirement = PlayerConfig.Instance?.PowerConsumption ?? 2400f;
             buildingDef.EnergyConsumptionWhenActive = powerRequirement;
             buildingDef.ExhaustKilowattsWhenActive = 0f;
@@ -59,9 +59,9 @@ namespace OxygenNotIncluded.Mods.ModTemplate
 
         public override void ConfigureBuildingTemplate(GameObject go, Tag prefab_tag)
         {
-            // Storage configured for 100 kg total capacity
+            // Storage configured for 200 kg total capacity to comfortably handle 40 kg Turbo batches
             Storage storage = go.AddOrGet<Storage>();
-            storage.capacityKg = 100f;
+            storage.capacityKg = 200f;
             storage.showInUI = true;
             storage.SetDefaultStoredItemModifiers(StoredItemModifiers);
 

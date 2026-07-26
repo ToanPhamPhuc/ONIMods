@@ -35,5 +35,10 @@ namespace OxygenNotIncluded.Mods.ModTemplate
         [JsonProperty]
         [Option("Cooling Mode", "Controls output temperature logic.")]
         public CoolingMode OutputCoolingMode { get; set; } = CoolingMode.Safe;
+
+        // NEW: Experimental / Alpha toggle for Turbo Mode
+        [JsonProperty]
+        [Option("Enable Turbo Mode (Alpha)", "Enable the sidescreen button to toggle 4x speed and power mode.")]
+        public bool EnableTurboMode { get; set; } = false;
     }
 }

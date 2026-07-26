@@ -4,7 +4,7 @@ using UnityEngine;
 namespace OxygenNotIncluded.Mods.ModTemplate
 {
     [SerializationConfig(MemberSerialization.OptIn)]
-    public class CryoCondenser : KMonoBehaviour, ISim200ms
+    public class CryoCondenser : KMonoBehaviour, ISim200ms, ISidescreenButtonControl
     {
         [MyCmpReq]
         private Storage storage;
@@ -12,12 +12,43 @@ namespace OxygenNotIncluded.Mods.ModTemplate
         private Operational operational;
         [MyCmpReq]
         private PrimaryElement primaryElement;
+        [MyCmpReq]
+        private EnergyConsumer energyConsumer;
 
-        private const float BATCH_MASS_KG = 10f; // 10 kg per processing tick
-        private const float HIGH_WATER_MARK_KG = 100f; // Wait until 100 kg accumulated to start!
+        private const float BASE_BATCH_MASS_KG = 10f; // 10 kg/tick in Classic Mode
+        private const float HIGH_WATER_MARK_KG = 100f; // Wait until 100 kg accumulated to start
 
         [Serialize]
         private bool isBufferingFull = false;
+
+        [Serialize]
+        private bool isTurboMode = false;
+
+        protected override void OnSpawn()
+        {
+            base.OnSpawn();
+
+            // If Turbo Mode setting is turned off in config, force reset active turbo mode
+            if (!(PlayerConfig.Instance?.EnableTurboMode ?? false))
+            {
+                isTurboMode = false;
+            }
+
+            UpdatePowerConsumption();
+        }
+
+        private void UpdatePowerConsumption()
+        {
+            float basePower = PlayerConfig.Instance?.PowerConsumption ?? 2400f;
+            // Turbo mode consumes 4x energy if enabled and active
+            bool turboEnabled = PlayerConfig.Instance?.EnableTurboMode ?? false;
+            float currentRequirement = (isTurboMode && turboEnabled) ? basePower * 4f : basePower;
+
+            if (energyConsumer != null)
+            {
+                energyConsumer.BaseWattageRating = currentRequirement;
+            }
+        }
 
         public void Sim200ms(float dt)
         {
@@ -62,13 +93,17 @@ namespace OxygenNotIncluded.Mods.ModTemplate
                 }
             }
 
+            // Target batch mass based on selected mode (10 kg vs 40 kg)
+            bool turboEnabled = PlayerConfig.Instance?.EnableTurboMode ?? false;
+            float batchMass = (isTurboMode && turboEnabled) ? BASE_BATCH_MASS_KG * 4f : BASE_BATCH_MASS_KG;
+
             // 3. Find target element
             Element targetGasElement = null;
             float maxMassFound = 0f;
 
             foreach (var kvp in elementMassMap)
             {
-                if (kvp.Value >= BATCH_MASS_KG && kvp.Value > maxMassFound)
+                if (kvp.Value >= batchMass && kvp.Value > maxMassFound)
                 {
                     maxMassFound = kvp.Value;
                     targetGasElement = kvp.Key;
@@ -84,13 +119,13 @@ namespace OxygenNotIncluded.Mods.ModTemplate
 
             // 4. Process Batch
             Element liquidElement = targetGasElement.lowTempTransition;
-            float massToConvert = BATCH_MASS_KG;
+            float massToConvert = batchMass;
 
             // Select output temperature based on configured CoolingMode
             float targetTempKelvin;
             if (PlayerConfig.Instance?.OutputCoolingMode == CoolingMode.Safe)
             {
-                // Safe Mode: Freezing point + 4K buffer (prevents pipe bursts)
+                // Safe Mode: Freezing point + 4K buffer
                 targetTempKelvin = liquidElement.lowTemp + 4f;
             }
             else
@@ -134,6 +169,7 @@ namespace OxygenNotIncluded.Mods.ModTemplate
 
             if (tempDiff > 0f)
             {
+                // Mass converted naturally yields heat into the building
                 float heatExtractedDTU = massToConvert * targetGasElement.specificHeatCapacity * tempDiff;
                 float buildingMass = primaryElement.Mass;
                 float buildingSHC = primaryElement.Element.specificHeatCapacity;
@@ -158,5 +194,37 @@ namespace OxygenNotIncluded.Mods.ModTemplate
                 true
             );
         }
+
+        #region ISidescreenButtonControl Interface
+        public string SidescreenTitle => "Cryo Condenser";
+
+        public string SidescreenButtonText => isTurboMode ? "Mode: TURBO (4x)" : "Mode: Classic (1x)";
+
+        public string SidescreenButtonTooltip => isTurboMode
+            ? "Currently operating at 4x speed and consuming 4x power."
+            : "Currently operating at normal speed and power consumption.";
+
+        public bool SidescreenEnabled() => PlayerConfig.Instance?.EnableTurboMode ?? false;
+
+        public bool SidescreenButtonInteractable() => PlayerConfig.Instance?.EnableTurboMode ?? false;
+
+        // Hide the sidescreen button completely when option is disabled
+        public bool SidescreenButtonShowable() => PlayerConfig.Instance?.EnableTurboMode ?? false;
+
+        public void SetButtonTextOverride(ButtonMenuTextOverride text) { }
+
+        public void OnSidescreenButtonPressed()
+        {
+            if (PlayerConfig.Instance?.EnableTurboMode ?? false)
+            {
+                isTurboMode = !isTurboMode;
+                UpdatePowerConsumption();
+            }
+        }
+
+        public int ButtonSideScreenSortOrder() => 20;
+
+        public int HorizontalGroupID() => -1;
+        #endregion
     }
 }

@@ -1,0 +1,6 @@
+C:\Users\ADMIN\source\repos\ONIMods\ONIMods\bin\Release\ONIMods.dll
+C:\Users\ADMIN\source\repos\ONIMods\ONIMods\bin\Release\ONIMods.pdb
+C:\Users\ADMIN\source\repos\ONIMods\ONIMods\obj\Release\ModTemplate.csproj.AssemblyReference.cache
+C:\Users\ADMIN\source\repos\ONIMods\ONIMods\obj\Release\ModTemplate.csproj.CoreCompileInputs.cache
+C:\Users\ADMIN\source\repos\ONIMods\ONIMods\obj\Release\ONIMods.dll
+C:\Users\ADMIN\source\repos\ONIMods\ONIMods\obj\Release\ONIMods.pdb
