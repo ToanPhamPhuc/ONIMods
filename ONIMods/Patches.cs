@@ -30,15 +30,33 @@ namespace OxygenNotIncluded.Mods.ModTemplate
         {
             public static void Postfix(Database.Techs __instance)
             {
-                // Dynamic Research Tier Selection
-                string targetTechId = "LiquidTemperature"; // Default / Easy
+                Tech tech = null;
 
                 if (PlayerConfig.Instance?.Difficulty == TechDifficulty.Hard)
                 {
-                    targetTechId = "HydrogenEngine"; // Hard Mode
+                    // Try Hard Mode tech IDs in order of preference (DLC & Base Game compatibility)
+                    string[] hardTechCandidates = new string[]
+                    {
+                "CryoFuelEngine",     // Base / Spaced Out Cryo/Hydrogen Engine
+                "CryoPropulsion",     // Alternative Cryo node
+                "AdvancedRocketry",   // Fallback Rocketry node
+                "HydrocarbonPropulsion"
+                    };
+
+                    foreach (string techId in hardTechCandidates)
+                    {
+                        tech = __instance.TryGet(techId);
+                        if (tech != null) break;
+                    }
                 }
 
-                Tech tech = __instance.Get(targetTechId);
+                // Fallback to Easy Mode (Liquid Temperature) if Hard Mode tech wasn't found
+                if (tech == null)
+                {
+                    tech = __instance.TryGet("LiquidTemperature");
+                }
+
+                // Add the building to whichever tech node was successfully found
                 tech?.unlockedItemIDs.Add(CryoCondenserConfig.ID);
             }
         }
