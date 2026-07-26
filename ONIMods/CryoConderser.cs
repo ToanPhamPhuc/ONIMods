@@ -85,7 +85,19 @@ namespace OxygenNotIncluded.Mods.ModTemplate
             // 4. Process Batch
             Element liquidElement = targetGasElement.lowTempTransition;
             float massToConvert = BATCH_MASS_KG;
-            float targetTempKelvin = Mathf.Max(targetGasElement.lowTemp - 14f, 1f);
+
+            // Select output temperature based on configured CoolingMode
+            float targetTempKelvin;
+            if (PlayerConfig.Instance?.OutputCoolingMode == CoolingMode.Safe)
+            {
+                // Safe Mode: Freezing point + 4K buffer (prevents pipe bursts)
+                targetTempKelvin = liquidElement.lowTemp + 4f;
+            }
+            else
+            {
+                // Legacy Mode: Boiling point - 14K
+                targetTempKelvin = Mathf.Max(targetGasElement.lowTemp - 14f, 1f);
+            }
 
             float remainingToConsume = massToConvert;
             float totalGasTempSum = 0f;
