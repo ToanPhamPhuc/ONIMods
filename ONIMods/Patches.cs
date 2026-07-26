@@ -34,13 +34,11 @@ namespace OxygenNotIncluded.Mods.ModTemplate
 
                 if (PlayerConfig.Instance?.Difficulty == TechDifficulty.Hard)
                 {
-                    // Try Hard Mode tech IDs in order of preference (DLC & Base Game compatibility)
-                    string[] hardTechCandidates = new string[]
-                    {
-                "CryoFuelEngine",     // Base / Spaced Out Cryo/Hydrogen Engine
-                "CryoPropulsion",     // Alternative Cryo node
-                "AdvancedRocketry",   // Fallback Rocketry node
-                "HydrocarbonPropulsion"
+                    // DLC: CryoFuelPropulsion | Base Game: HydrogenEngine
+                    string[] hardTechCandidates = new string[] 
+                    { 
+                        "CryoFuelPropulsion", 
+                        "HydrogenEngine" 
                     };
 
                     foreach (string techId in hardTechCandidates)
@@ -50,13 +48,13 @@ namespace OxygenNotIncluded.Mods.ModTemplate
                     }
                 }
 
-                // Fallback to Easy Mode (Liquid Temperature) if Hard Mode tech wasn't found
+                // Fallback to Easy Mode (LiquidTemperature / Aquatuner) if not set or found
                 if (tech == null)
                 {
                     tech = __instance.TryGet("LiquidTemperature");
                 }
 
-                // Add the building to whichever tech node was successfully found
+                // Add building to the resolved tech node
                 tech?.unlockedItemIDs.Add(CryoCondenserConfig.ID);
             }
         }
